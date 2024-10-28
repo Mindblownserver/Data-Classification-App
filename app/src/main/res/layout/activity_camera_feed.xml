@@ -21,7 +21,7 @@
         android:id="@+id/pic_btn"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
+        android:layout_margin="70dp"
 
         app:srcCompat="@drawable/ic_camera"
         android:layout_alignParentBottom="true"

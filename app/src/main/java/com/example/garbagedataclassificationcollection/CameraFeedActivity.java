@@ -3,14 +3,19 @@ package com.example.garbagedataclassificationcollection;
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.ImageFormat;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.CaptureResult;
+import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.ImageReader;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -20,16 +25,16 @@ import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
-import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.app.ActivityCompat;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
+
+
+import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,7 +46,18 @@ public class CameraFeedActivity extends AppCompatActivity {
     public static final String CAMERA_FEED= "Camera Feed";
     public static final String CAMERA_ACCESS= "Camera Access";
     public static final int REQUEST_CAM_PERMISSION = 3;
+    private static final int PREVIEW_STATE=1;
+    private static final int WAIT_LOCK_STATE=2;
+
+    private int captureState = PREVIEW_STATE;
+
+
+    public FloatingActionButton picBtn;
+    public int nbrImg = 1;
+    public boolean isShutteringPhoto=false;
+
     private TextureView camFeed;
+    private SurfaceTexture surfaceTexture;
     private TextureView.SurfaceTextureListener camFeedSurfaceTexture = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surfaceTexture, int i, int i1) {
@@ -71,6 +87,7 @@ public class CameraFeedActivity extends AppCompatActivity {
         @Override
         public void onOpened(@NonNull CameraDevice cameraDevice) {
             cam = cameraDevice;
+
             startPreview();
 
         }
@@ -91,6 +108,15 @@ public class CameraFeedActivity extends AppCompatActivity {
     private String camId;
     private Size camPreviewSize;
 
+    private Size camImageSize;
+    private ImageReader imgReader;
+    private final ImageReader.OnImageAvailableListener imgAvailableListener = new ImageReader.OnImageAvailableListener() {
+        @Override
+        public void onImageAvailable(ImageReader imageReader) {
+            // return the result to the activity (Byte[] or buffer
+        }
+    };
+
     private Handler bgHandler;
     private HandlerThread bgThread;
 
@@ -110,19 +136,48 @@ public class CameraFeedActivity extends AppCompatActivity {
         }
     }
 
-    private CaptureRequest.Builder capReqBuilder;
+    private CaptureRequest.Builder capPreviewBuilder;
+    private CameraCaptureSession previewCapSess;
+    private CameraCaptureSession.CaptureCallback previewCapSessCallback= new CameraCaptureSession.CaptureCallback() {
+        private void process(CaptureResult res){
+            switch (captureState){
+                case PREVIEW_STATE:
+                    break;
+                case WAIT_LOCK_STATE:
+                    captureState= PREVIEW_STATE;// to only capture 1 image at a time, change this to support shutter image
+                    Integer af_state = res.get(CaptureResult.CONTROL_AF_STATE);
+                    Toast.makeText(CameraFeedActivity.this, ""+af_state, Toast.LENGTH_SHORT).show();
+                    if(af_state!=null){
+                        if(af_state== CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED || af_state== CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED || af_state==CaptureResult.CONTROL_AF_STATE_PASSIVE_FOCUSED){
+                            Toast.makeText(CameraFeedActivity.this, "Focused!", Toast.LENGTH_SHORT).show();
+                            startTakingPicture();
+                        }
+                    }
+                    break;
+            }
+        }
+
+        @Override
+        public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+            super.onCaptureCompleted(session, request, result);
+            process(result);
+        }
+    };
+    private CaptureRequest.Builder capImageBuilder;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_camera_feed);
-//        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
-//            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-//            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
-//            return insets;
-//        });
         camFeed = findViewById(R.id.cam_feed);
-
+        picBtn = findViewById(R.id.pic_btn);
+        picBtn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                lockFocus();
+            }
+        });
         findViewById(R.id.back_btn).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -197,6 +252,9 @@ public class CameraFeedActivity extends AppCompatActivity {
                         rotatedWidth=height;
                     }
                     camPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),rotatedWidth, rotatedHeight);
+                    camImageSize = chooseOptimalSize(map.getOutputSizes(ImageFormat.JPEG),rotatedWidth, rotatedHeight);
+                    imgReader = ImageReader.newInstance(camImageSize.getWidth(), camImageSize.getHeight(), ImageFormat.JPEG, nbrImg);
+                    imgReader.setOnImageAvailableListener(imgAvailableListener, bgHandler);
                     this.camId = camId;
                     return;
                 }
@@ -223,17 +281,20 @@ public class CameraFeedActivity extends AppCompatActivity {
     }
 
     private void startPreview(){
-        SurfaceTexture surfaceTexture = camFeed.getSurfaceTexture();
+        surfaceTexture = camFeed.getSurfaceTexture();
         surfaceTexture.setDefaultBufferSize(camPreviewSize.getWidth(), camPreviewSize.getHeight());
         Surface previewSurface = new Surface(surfaceTexture); // should be freed after use
         try{
-           capReqBuilder = cam.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
-           capReqBuilder.addTarget(previewSurface);
-           cam.createCaptureSession(Arrays.asList(previewSurface), new CameraCaptureSession.StateCallback() {
+           capPreviewBuilder = cam.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+           capPreviewBuilder.addTarget(previewSurface);
+
+           cam.createCaptureSession(Arrays.asList(previewSurface, imgReader.getSurface()), new CameraCaptureSession.StateCallback() {
                @Override
                public void onConfigured(@NonNull CameraCaptureSession cameraCaptureSession) {
+                   previewCapSess = cameraCaptureSession;
                    try {
-                       cameraCaptureSession.setRepeatingRequest(capReqBuilder.build(), null, bgHandler);
+                       capPreviewBuilder.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+                       previewCapSess.setRepeatingRequest(capPreviewBuilder.build(), null, bgHandler);
                    } catch (CameraAccessException e) {
                        Log.d(CAMERA_ACCESS, "Error in setting up cam preview"+e);
                        throw new RuntimeException(e);
@@ -248,11 +309,32 @@ public class CameraFeedActivity extends AppCompatActivity {
         }catch(CameraAccessException e){
             Log.d(CAMERA_ACCESS, "error in creating capture req: "+e);
         }
+    }
 
+    private void startTakingPicture(){
+        try {
+            capImageBuilder = cam.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            capImageBuilder.addTarget(imgReader.getSurface());
+            CameraCaptureSession.CaptureCallback imgCapCallback = new CameraCaptureSession.CaptureCallback() {
+                @Override
+                public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
+                    super.onCaptureStarted(session, request, timestamp, frameNumber);
+                }
+
+                @Override
+                public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
+                    super.onCaptureCompleted(session, request, result);
+                }
+            };
+            previewCapSess.capture(capPreviewBuilder.build(), imgCapCallback, null); // it's called in a method within bgHandler, so it's null here
+        }catch (CameraAccessException e){
+            Log.d(CAMERA_ACCESS, "Error in start taking picture "+e);
+        }
     }
     private void closeCamera(){
         if(cam!=null){
             cam.close();
+
             cam=null;
         }
     }
@@ -283,19 +365,43 @@ public class CameraFeedActivity extends AppCompatActivity {
         return (sensorOrien+deviceOrien+360)%360;
     }
 
-    private static Size chooseOptimalSize(Size[] choices, int width, int height){
+    private static Size chooseOptimalSize(Size[] choices, int width, int height) {
         List<Size> bigEnough = new ArrayList<>();
-        for(Size option:choices){
-            if(option.getHeight()== option.getWidth()*height/width && option.getWidth()>=width&&
-                option.getHeight()>=height){
+        double targetRatio = (double) width / height;
+        Size closestSize = null;
+        double minDiff = Double.MAX_VALUE;
+
+        for (Size option : choices) {
+            double optionRatio = (double) option.getWidth() / option.getHeight();
+            // check if aspect ratio is close enough
+            if (Math.abs(optionRatio - targetRatio) < 0.1 && option.getWidth() >= width && option.getHeight() >= height) {
                 bigEnough.add(option);
             }
+
+            // just in case no aspect ratio is found
+            double areaDiff = Math.abs((option.getWidth() * option.getHeight()) - (width * height));
+            if (areaDiff < minDiff) {
+                closestSize = option;
+                minDiff = areaDiff;
+            }
         }
-        if(!bigEnough.isEmpty()){
+
+        if (!bigEnough.isEmpty()) {
             return Collections.min(bigEnough, new CompareSizeByArea());
+        } else if (closestSize != null) {
+            return closestSize;
+        } else {
+            return choices[0];
         }
-        else{
-            return choices[8];
+    }
+
+    private void lockFocus(){
+        captureState = WAIT_LOCK_STATE;
+
+        try {
+            previewCapSess.capture(capPreviewBuilder.build(),previewCapSessCallback,bgHandler);
+        } catch (CameraAccessException e) {
+            throw new RuntimeException(e);
         }
     }
 }

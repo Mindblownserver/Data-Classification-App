@@ -61,7 +61,9 @@ public class MainActivity extends AppCompatActivity {
         camBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
+                // turn this into a launcher, then this will get the byte[] or buffer and write it into the storage (and changes the csv file)
                 Intent i = new Intent(MainActivity.this, CameraFeedActivity.class);
+
                 startActivity(i);
             }
         });
