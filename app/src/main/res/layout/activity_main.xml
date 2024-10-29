@@ -43,18 +43,19 @@
                 android:layout_below="@id/title"
                 style="@style/Widget.Material3.TextInputEditText.OutlinedBox"
                 />
+
             <EditText
                 android:id="@+id/qte_field"
+                style="@style/Widget.Material3.TextInputEditText.OutlinedBox"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:hint="Number of photos"
-                android:layout_marginTop="10dp"
-                android:ems="10"
-                android:inputType="numberDecimal"
                 android:layout_below="@id/garbage_field"
+                android:layout_marginTop="10dp"
                 android:background="@drawable/field"
-                style="@style/Widget.Material3.TextInputEditText.OutlinedBox"
-                />
+                android:ems="10"
+
+                android:hint="Number of photos"
+                android:inputType="numberDecimal" />
             <Button
                 android:id="@+id/browse_btn"
                 android:layout_width="wrap_content"

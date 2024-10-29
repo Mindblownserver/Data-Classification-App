@@ -5,7 +5,9 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.InputType;
 import android.view.View;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -25,10 +27,14 @@ import androidx.documentfile.provider.DocumentFile;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements DataCommunicationInterface {
     private static final int REQUEST_WRITE_SOTRAGE = 1;
     private static final int REQUEST_READ_SOTRAGE = 2;
 
@@ -37,6 +43,9 @@ public class MainActivity extends AppCompatActivity {
     private DocumentFile myDataSetDirectory;
     private DocumentFile myDataSet;
     private FloatingActionButton camBtn;
+    private EditText garbageField;
+    private EditText qteField;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -50,7 +59,9 @@ public class MainActivity extends AppCompatActivity {
 
         pathTxt = findViewById(R.id.path_txt);
         camBtn = findViewById(R.id.cam_btn);
-
+        garbageField= findViewById(R.id.garbage_field);
+        qteField = findViewById(R.id.qte_field);
+        qteField.setInputType(InputType.TYPE_NULL);
         findViewById(R.id.browse_btn).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -61,10 +72,19 @@ public class MainActivity extends AppCompatActivity {
         camBtn.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                // turn this into a launcher, then this will get the byte[] or buffer and write it into the storage (and changes the csv file)
-                Intent i = new Intent(MainActivity.this, CameraFeedActivity.class);
+                // get the number of elements in the selected class in csv if exists
+                if(!garbageField.getText().toString().trim().equals("")){
 
-                startActivity(i);
+                    DocumentFile garbageClassFolder = createImageFolder(garbageField.getText().toString().trim());
+
+                    Intent i = new Intent(MainActivity.this, CameraFeedActivity.class);
+
+                    i.putExtra(GARBAGE_CLASS_FOLDER, garbageClassFolder.getUri());
+                    i.putExtra(CSV_FILE, myDataSet.getUri());
+                    i.putExtra(GARBAGE_CLASS_NAME, garbageField.getText().toString());
+                    i.putExtra(GARBAGE_CLASS_NUMBER, Integer.parseInt(qteField.getText().toString()));
+                    startActivity(i);
+                }
             }
         });
 
@@ -77,18 +97,35 @@ public class MainActivity extends AppCompatActivity {
                     // check if you can write in directory
                     // get CSV Document
                     boolean foundFile = csvFileExists();
+                    /* Todo: Get the number of rows with chosen class name (we can do that upon the camBtn click*/
                     if(!foundFile){
                         myDataSet = myDataSetDirectory.createFile("text/csv", "myDataSet.csv");
                         writeHeader(myDataSet);
                     }
                     pathTxt.setText(R.string.dir_loaded);
+                    garbageField.setInputType(InputType.TYPE_NULL); // make sure to make it editable after returning from CameraFeedActivity
+                    qteField.setText(""+getGarbageClassNbr(garbageField.getText().toString(), myDataSet));
+
                 }
             }
         });
 
     }
 
-
+    private DocumentFile createImageFolder(String garbageClassName){
+        DocumentFile garbageClassFolder = null;
+        /* Todo: Check if the folder for selected garbage name exists, if not, create it!*/
+        for(DocumentFile localGarbageClassFolder: myDataSetDirectory.listFiles()){
+            if(localGarbageClassFolder.canWrite() && localGarbageClassFolder.isDirectory() && localGarbageClassFolder.getName().equals(garbageClassName)){
+                garbageClassFolder = localGarbageClassFolder;
+                break;
+            }
+        }
+        if(garbageClassFolder==null){
+            myDataSetDirectory.createDirectory(garbageClassName);
+        }
+        return garbageClassFolder;
+    }
 
     private boolean csvFileExists(){
         boolean foundCsv=false;
@@ -122,19 +159,30 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private int getGarbageClassNbr(String garbageClassName, DocumentFile dataset){
+        int nbrGarbage = 0;
 
-    private void writeData(DocumentFile csvFile){
-        if(myDataSet!=null && myDataSet.canWrite()){
-            try{
-                OutputStream out = getContentResolver().openOutputStream(myDataSet.getUri(), "wa");
-                String initData = "\ngarbage_class, image";
-                out.write(initData.getBytes());
-                out.close();
-                Toast.makeText(this, "Wrote File successfully", Toast.LENGTH_SHORT).show();
-            }catch(IOException e){
-                Toast.makeText(this, ""+e, Toast.LENGTH_SHORT).show();
+        // doesn't need to check for the file existance because we already did that
+        if(dataset!=null && dataset.canRead()){
+
+            try {
+                InputStream in = getContentResolver().openInputStream(dataset.getUri());
+                if(in!=null){
+                    BufferedReader buffer = new BufferedReader(new InputStreamReader(in));
+                    String line;
+                    while((line = buffer.readLine())!=null){
+                        if(line.split(",")[0].toString().equals(garbageClassName)){
+                            nbrGarbage+=1;
+                        }
+                    }
+                    buffer.close();
+                    in.close();
+                }
+            } catch (IOException e){
+                throw new RuntimeException(e);
             }
         }
+        return nbrGarbage;
     }
 
     @NonNull

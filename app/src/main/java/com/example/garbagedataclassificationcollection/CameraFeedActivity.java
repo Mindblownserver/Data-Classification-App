@@ -15,7 +15,10 @@ import android.hardware.camera2.CaptureRequest;
 import android.hardware.camera2.CaptureResult;
 import android.hardware.camera2.TotalCaptureResult;
 import android.hardware.camera2.params.StreamConfigurationMap;
+import android.media.Image;
 import android.media.ImageReader;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -32,23 +35,27 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.core.app.ActivityCompat;
+import androidx.documentfile.provider.DocumentFile;
 
 
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-public class CameraFeedActivity extends AppCompatActivity {
+public class CameraFeedActivity extends AppCompatActivity implements DataCommunicationInterface{
     public static final String CAMERA_FEED= "Camera Feed";
     public static final String CAMERA_ACCESS= "Camera Access";
     public static final int REQUEST_CAM_PERMISSION = 3;
     private static final int PREVIEW_STATE=1;
     private static final int WAIT_LOCK_STATE=2;
-
+    private static final String IO_EXCEPTION="OIException";
     private int captureState = PREVIEW_STATE;
 
 
@@ -108,14 +115,50 @@ public class CameraFeedActivity extends AppCompatActivity {
     private String camId;
     private Size camPreviewSize;
 
+    private int totalRotation;
     private Size camImageSize;
+
+    private String imageName;
     private ImageReader imgReader;
+    private DocumentFile outputImageFile;
     private final ImageReader.OnImageAvailableListener imgAvailableListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(ImageReader imageReader) {
             // return the result to the activity (Byte[] or buffer
+            bgHandler.post(()->new ImageSaver(imageReader.acquireLatestImage()));
         }
     };
+
+    private class ImageSaver implements Runnable{
+
+        private Image img;
+        public ImageSaver(Image image){
+            img=image;
+        }
+        @Override
+        public void run() {
+            ByteBuffer buffer = img.getPlanes()[0].getBuffer();
+            byte[] bytes = new byte[buffer.remaining()];
+            buffer.get(bytes);
+            // Todo: createImage & fill it with data
+            try(OutputStream out = getContentResolver().openOutputStream(outputImageFile.getUri())){
+                if(out != null){
+                    out.write(bytes);
+                }
+            }catch (IOException e){
+                Log.d(IO_EXCEPTION, "Error in saving image", e);
+            }finally {
+                buffer.clear();
+
+            }
+
+            // after clearing
+            buffer.clear();
+            img.close();
+            // Todo: save it in csv. garbageClassFolder/imageName
+            writeDataToDataSet(garbageClassFolder+"/"+imageName);
+        }
+    }
 
     private Handler bgHandler;
     private HandlerThread bgThread;
@@ -165,6 +208,12 @@ public class CameraFeedActivity extends AppCompatActivity {
     };
     private CaptureRequest.Builder capImageBuilder;
 
+    // attributes relative to prev activity
+    private DocumentFile dataSetDirectory;
+    private DocumentFile dataset;
+    private DocumentFile garbageClassFolder;
+    private String garbageClassName;
+    private int garbageClassNumber;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -184,6 +233,24 @@ public class CameraFeedActivity extends AppCompatActivity {
                 finish();
             }
         });
+        // getting info from prev activity
+        Bundle b = getIntent().getExtras();
+        Uri dirUri;
+        Uri csvUri;
+
+        if(Build.VERSION.SDK_INT>=33){
+            dirUri = b.getParcelable(GARBAGE_CLASS_FOLDER, Uri.class);
+            csvUri = b.getParcelable(CSV_FILE, Uri.class);
+        }else{
+            dirUri= (Uri) b.getParcelable(GARBAGE_CLASS_FOLDER);
+            csvUri= (Uri) b.getParcelable(CSV_FILE);
+        }
+        if(dirUri!=null && csvUri!=null){
+            garbageClassFolder = DocumentFile.fromTreeUri(this, dirUri);
+            dataset = DocumentFile.fromSingleUri(this, csvUri);
+            garbageClassName = b.getString(GARBAGE_CLASS_NAME);
+            garbageClassNumber = b.getInt(GARBAGE_CLASS_NUMBER);
+        }
     }
 
     @Override
@@ -243,7 +310,7 @@ public class CameraFeedActivity extends AppCompatActivity {
                     // adjusting orientation for calculating preview size
                     StreamConfigurationMap map = camChar.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
                     int deviceOrien = getWindowManager().getDefaultDisplay().getRotation();
-                    int totalRotation = sensorToDeviceOrien(camChar, deviceOrien);
+                    totalRotation = sensorToDeviceOrien(camChar, deviceOrien);
                     boolean isPortrait = totalRotation==90 || totalRotation==270;
                     int rotatedWidth=width;
                     int rotatedHeight = height;
@@ -313,17 +380,21 @@ public class CameraFeedActivity extends AppCompatActivity {
 
     private void startTakingPicture(){
         try {
-            capImageBuilder = cam.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            capImageBuilder.addTarget(imgReader.getSurface());
+            capPreviewBuilder = cam.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            capPreviewBuilder.addTarget(imgReader.getSurface());
+            capPreviewBuilder.set(CaptureRequest.JPEG_ORIENTATION, totalRotation);
             CameraCaptureSession.CaptureCallback imgCapCallback = new CameraCaptureSession.CaptureCallback() {
                 @Override
                 public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
                     super.onCaptureStarted(session, request, timestamp, frameNumber);
+                    outputImageFile = createImageFile();
                 }
 
                 @Override
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
+                    // Todo: Add UI counter to keep track of the number of pictures taken
+                    garbageClassNumber+=1;
                 }
             };
             previewCapSess.capture(capPreviewBuilder.build(), imgCapCallback, null); // it's called in a method within bgHandler, so it's null here
@@ -397,11 +468,30 @@ public class CameraFeedActivity extends AppCompatActivity {
 
     private void lockFocus(){
         captureState = WAIT_LOCK_STATE;
-
         try {
             previewCapSess.capture(capPreviewBuilder.build(),previewCapSessCallback,bgHandler);
         } catch (CameraAccessException e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    private DocumentFile createImageFile(){
+        /* Todo: Create image file after capturing the image, its name follows this format: (garbageClass)-(number).jpeg*/
+        imageName = garbageClassName+"_"+garbageClassNumber;
+        return garbageClassFolder.createFile("image/jpeg", imageName);
+    }
+
+    private void writeDataToDataSet(String imageLocalDirectory){
+        if(dataset!=null && dataset.canWrite()){
+            try{
+                OutputStream out = getContentResolver().openOutputStream(dataset.getUri(), "wa");
+                String initData = "\n"+garbageClassName+","+imageLocalDirectory;
+                out.write(initData.getBytes());
+                out.close();
+                Toast.makeText(this, "Wrote File successfully", Toast.LENGTH_SHORT).show();
+            }catch(IOException e){
+                Toast.makeText(this, ""+e, Toast.LENGTH_SHORT).show();
+            }
         }
     }
 }
