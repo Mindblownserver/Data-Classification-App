@@ -125,7 +125,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
         @Override
         public void onImageAvailable(ImageReader imageReader) {
             // return the result to the activity (Byte[] or buffer
-            bgHandler.post(()->new ImageSaver(imageReader.acquireLatestImage()));
+            bgHandler.post(new ImageSaver(imageReader.acquireLatestImage()));
         }
     };
 
@@ -148,15 +148,12 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
             }catch (IOException e){
                 Log.d(IO_EXCEPTION, "Error in saving image", e);
             }finally {
+                // after clearing
                 buffer.clear();
+                img.close();
+                Toast.makeText(CameraFeedActivity.this, "Wrote File successfully", Toast.LENGTH_SHORT).show();
 
             }
-
-            // after clearing
-            buffer.clear();
-            img.close();
-            // Todo: save it in csv. garbageClassFolder/imageName
-            writeDataToDataSet(garbageClassFolder+"/"+imageName);
         }
     }
 
@@ -189,11 +186,12 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
                 case WAIT_LOCK_STATE:
                     captureState= PREVIEW_STATE;// to only capture 1 image at a time, change this to support shutter image
                     Integer af_state = res.get(CaptureResult.CONTROL_AF_STATE);
-                    Toast.makeText(CameraFeedActivity.this, ""+af_state, Toast.LENGTH_SHORT).show();
                     if(af_state!=null){
                         if(af_state== CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED || af_state== CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED || af_state==CaptureResult.CONTROL_AF_STATE_PASSIVE_FOCUSED){
                             Toast.makeText(CameraFeedActivity.this, "Focused!", Toast.LENGTH_SHORT).show();
                             startTakingPicture();
+                        }else{
+                            Toast.makeText(CameraFeedActivity.this, "Wait until focused", Toast.LENGTH_SHORT).show();
                         }
                     }
                     break;
@@ -314,7 +312,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
                     boolean isPortrait = totalRotation==90 || totalRotation==270;
                     int rotatedWidth=width;
                     int rotatedHeight = height;
-                    if(isPortrait){
+                    if(!isPortrait){
                         rotatedHeight=width;
                         rotatedWidth=height;
                     }
@@ -395,6 +393,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
                     super.onCaptureCompleted(session, request, result);
                     // Todo: Add UI counter to keep track of the number of pictures taken
                     garbageClassNumber+=1;
+                    writeDataToDataSet(garbageClassName+"/"+imageName);
                 }
             };
             previewCapSess.capture(capPreviewBuilder.build(), imgCapCallback, null); // it's called in a method within bgHandler, so it's null here
@@ -488,7 +487,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
                 String initData = "\n"+garbageClassName+","+imageLocalDirectory;
                 out.write(initData.getBytes());
                 out.close();
-                Toast.makeText(this, "Wrote File successfully", Toast.LENGTH_SHORT).show();
+
             }catch(IOException e){
                 Toast.makeText(this, ""+e, Toast.LENGTH_SHORT).show();
             }

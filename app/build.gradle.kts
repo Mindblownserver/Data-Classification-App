@@ -33,6 +33,8 @@ android {
 
 dependencies {
 
+    // fix DocumentFile Bug (fromTreeUri returns root DocumentFile instead of the current one
+    implementation("androidx.documentfile:documentfile:1.1.0-alpha01")
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)

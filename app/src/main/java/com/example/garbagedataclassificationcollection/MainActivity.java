@@ -81,7 +81,7 @@ public class MainActivity extends AppCompatActivity implements DataCommunication
 
                     i.putExtra(GARBAGE_CLASS_FOLDER, garbageClassFolder.getUri());
                     i.putExtra(CSV_FILE, myDataSet.getUri());
-                    i.putExtra(GARBAGE_CLASS_NAME, garbageField.getText().toString());
+                    i.putExtra(GARBAGE_CLASS_NAME, garbageClassFolder.getName());
                     i.putExtra(GARBAGE_CLASS_NUMBER, Integer.parseInt(qteField.getText().toString()));
                     startActivity(i);
                 }
@@ -122,7 +122,7 @@ public class MainActivity extends AppCompatActivity implements DataCommunication
             }
         }
         if(garbageClassFolder==null){
-            myDataSetDirectory.createDirectory(garbageClassName);
+            garbageClassFolder= myDataSetDirectory.createDirectory(garbageClassName);
         }
         return garbageClassFolder;
     }
