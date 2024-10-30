@@ -70,7 +70,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
     private TextureView.SurfaceTextureListener camFeedSurfaceTexture = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(@NonNull SurfaceTexture surfaceTexture, int i, int i1) {
-            Toast.makeText(CameraFeedActivity.this, "I'm available, mi-lord", Toast.LENGTH_SHORT).show();
+
             setupCamera(i, i1);
             connectCamera();
         }
@@ -123,11 +123,17 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
     private String imageName;
     private ImageReader imgReader;
     private DocumentFile outputImageFile;
+
     private final ImageReader.OnImageAvailableListener imgAvailableListener = new ImageReader.OnImageAvailableListener() {
         @Override
-        public void onImageAvailable(ImageReader imageReader) {
+        public void onImageAvailable(@NonNull ImageReader imageReader) {
             // return the result to the activity (Byte[] or buffer
-            bgHandler.post(new ImageSaver(imageReader.acquireLatestImage()));
+            Toast.makeText(CameraFeedActivity.this, "Inside Listener", Toast.LENGTH_SHORT).show();
+            Image latestImg=imageReader.acquireLatestImage();
+            if(latestImg!=null){
+                bgHandler.post(new ImageSaver(latestImg));
+            }
+
         }
     };
 
@@ -143,17 +149,27 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
             byte[] bytes = new byte[buffer.remaining()];
             buffer.get(bytes);
             // Todo: createImage & fill it with data
-            try(OutputStream out = getContentResolver().openOutputStream(outputImageFile.getUri())){
+            OutputStream out=null;
+            try{
+                out = getContentResolver().openOutputStream(outputImageFile.getUri());
                 if(out != null){
                     out.write(bytes);
                 }
+                Toast.makeText(CameraFeedActivity.this, "Wrote File successfully", Toast.LENGTH_SHORT).show();
             }catch (IOException e){
-                Log.d(IO_EXCEPTION, "Error in saving image", e);
+                Log.d(IO_EXCEPTION, "Error in saving image p1", e);
             }finally {
                 // after clearing
+                if(out!=null){
+                    try{
+                        out.close();
+
+                    }catch (IOException e){
+                        Log.d(IO_EXCEPTION, "error in saving message p2", e);
+                    }
+                }
                 buffer.clear();
                 img.close();
-                Toast.makeText(CameraFeedActivity.this, "Wrote File successfully", Toast.LENGTH_SHORT).show();
 
             }
         }
@@ -320,8 +336,8 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
                     }
                     camPreviewSize = chooseOptimalSize(map.getOutputSizes(SurfaceTexture.class),rotatedWidth, rotatedHeight);
                     camImageSize = chooseOptimalSize(map.getOutputSizes(ImageFormat.JPEG),rotatedWidth, rotatedHeight);
-                    imgReader = ImageReader.newInstance(camImageSize.getWidth(), camImageSize.getHeight(), ImageFormat.JPEG, nbrImg);
-                    imgReader.setOnImageAvailableListener(imgAvailableListener, bgHandler);
+                    imgReader = ImageReader.newInstance(camImageSize.getWidth(), camImageSize.getHeight(), ImageFormat.JPEG, 1);
+                    imgReader.setOnImageAvailableListener(imgAvailableListener,bgHandler);
                     this.camId = camId;
                     return;
                 }
@@ -385,19 +401,15 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
             capPreviewBuilder.set(CaptureRequest.JPEG_ORIENTATION, totalRotation);
             CameraCaptureSession.CaptureCallback imgCapCallback = new CameraCaptureSession.CaptureCallback() {
                 @Override
-                public void onCaptureStarted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, long timestamp, long frameNumber) {
-                    super.onCaptureStarted(session, request, timestamp, frameNumber);
-                    outputImageFile = createImageFile();
-                }
-
-                @Override
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
                     // Todo: Add UI counter to keep track of the number of pictures taken
                     garbageClassNumber+=1;
+                    outputImageFile = createImageFile();
                     writeDataToDataSet(garbageClassName+"/"+imageName);
                 }
             };
+            Toast.makeText(this, "StartTakingPicture toast", Toast.LENGTH_SHORT).show();
             previewCapSess.capture(capPreviewBuilder.build(), imgCapCallback, null); // it's called in a method within bgHandler, so it's null here
         }catch (CameraAccessException e){
             Log.d(CAMERA_ACCESS, "Error in start taking picture "+e);
