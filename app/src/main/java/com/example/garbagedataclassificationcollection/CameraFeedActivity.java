@@ -43,10 +43,12 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.List;
 
 public class CameraFeedActivity extends AppCompatActivity implements DataCommunicationInterface{
@@ -476,7 +478,8 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
 
     private DocumentFile createImageFile(){
         /* Todo: Create image file after capturing the image, its name follows this format: (garbageClass)-(number).jpeg*/
-        imageName = garbageClassName+"_"+garbageClassNumber;
+        String timestamp = new SimpleDateFormat("yyyy_MM_dd hh:mm:ss").format(new Date());
+        imageName = garbageClassName+"_"+garbageClassNumber+"_"+timestamp;
         return garbageClassFolder.createFile("image/jpeg", imageName);
     }
 
