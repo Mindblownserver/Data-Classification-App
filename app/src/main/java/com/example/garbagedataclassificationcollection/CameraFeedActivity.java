@@ -123,7 +123,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
     private String imageName;
     private ImageReader imgReader;
     private DocumentFile outputImageFile;
-
+    private boolean notWritingImage = false;
     private final ImageReader.OnImageAvailableListener imgAvailableListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(@NonNull ImageReader imageReader) {
@@ -287,6 +287,9 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
     protected void onResume() {
         super.onResume();
 
+        doingOnResume();
+    }
+    private void doingOnResume(){
         startBgThread();
         if(camFeed.isAvailable()){
             setupCamera(camFeed.getWidth(), camFeed.getHeight());
@@ -299,9 +302,13 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
     // in case we leave our app, we better free cam resource
     @Override
     protected void onPause(){
+        doingOnPause();
+        super.onPause();
+    }
+
+    private void doingOnPause(){
         closeCamera();
         stopBgThread();
-        super.onPause();
     }
 
     @Override
@@ -396,9 +403,9 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
 
     private void startTakingPicture(){
         try {
-            capPreviewBuilder = cam.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            capPreviewBuilder.addTarget(imgReader.getSurface());
-            capPreviewBuilder.set(CaptureRequest.JPEG_ORIENTATION, totalRotation);
+            capImageBuilder = cam.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
+            capImageBuilder.set(CaptureRequest.JPEG_ORIENTATION, totalRotation);
+            capImageBuilder.addTarget(imgReader.getSurface());
             CameraCaptureSession.CaptureCallback imgCapCallback = new CameraCaptureSession.CaptureCallback() {
                 @Override
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
@@ -408,9 +415,10 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
                     outputImageFile = createImageFile();
                     writeDataToDataSet(garbageClassName+"/"+imageName);
                 }
+
             };
             Toast.makeText(this, "StartTakingPicture toast", Toast.LENGTH_SHORT).show();
-            previewCapSess.capture(capPreviewBuilder.build(), imgCapCallback, null); // it's called in a method within bgHandler, so it's null here
+            previewCapSess.capture(capImageBuilder.build(), imgCapCallback, null); // it's called in a method within bgHandler, so it's null here
         }catch (CameraAccessException e){
             Log.d(CAMERA_ACCESS, "Error in start taking picture "+e);
         }
