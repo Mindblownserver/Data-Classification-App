@@ -28,6 +28,7 @@ import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.activity.EdgeToEdge;
@@ -123,12 +124,12 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
     private String imageName;
     private ImageReader imgReader;
     private DocumentFile outputImageFile;
-    private boolean notWritingImage = false;
+
     private final ImageReader.OnImageAvailableListener imgAvailableListener = new ImageReader.OnImageAvailableListener() {
         @Override
         public void onImageAvailable(@NonNull ImageReader imageReader) {
             // return the result to the activity (Byte[] or buffer
-            Toast.makeText(CameraFeedActivity.this, "Inside Listener", Toast.LENGTH_SHORT).show();
+            //Toast.makeText(CameraFeedActivity.this, "Inside Listener", Toast.LENGTH_SHORT).show();
             Image latestImg=imageReader.acquireLatestImage();
             if(latestImg!=null){
                 bgHandler.post(new ImageSaver(latestImg));
@@ -230,12 +231,14 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
     private DocumentFile garbageClassFolder;
     private String garbageClassName;
     private int garbageClassNumber;
+    //private TextView counterTxt;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_camera_feed);
         camFeed = findViewById(R.id.cam_feed);
+        //counterTxt= findViewById(R.id.img_counter);
         picBtn = findViewById(R.id.pic_btn);
         picBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -267,6 +270,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
             garbageClassName = b.getString(GARBAGE_CLASS_NAME);
             garbageClassNumber = b.getInt(GARBAGE_CLASS_NUMBER);
         }
+        //counterTxt.setText(garbageClassNumber+"");
     }
 
     @Override
@@ -410,8 +414,9 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
                 @Override
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
-                    // Todo: Add UI counter to keep track of the number of pictures taken
+                    // TODO: please make the bgHandler communicate with the original UI Thread to update counter
                     garbageClassNumber+=1;
+                    //counterTxt.setText(garbageClassNumber+"");
                     outputImageFile = createImageFile();
                     writeDataToDataSet(garbageClassName+"/"+imageName);
                 }
@@ -489,6 +494,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
 
     private void lockFocus(){
         captureState = WAIT_LOCK_STATE;
+
         try {
             previewCapSess.capture(capPreviewBuilder.build(),previewCapSessCallback,bgHandler);
         } catch (CameraAccessException e) {
