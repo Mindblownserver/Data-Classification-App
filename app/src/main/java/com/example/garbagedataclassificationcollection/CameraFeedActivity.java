@@ -22,6 +22,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.Looper;
 import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
@@ -178,6 +179,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
 
     private Handler bgHandler;
     private HandlerThread bgThread;
+    private Handler uiHandler;
 
     private static SparseIntArray ORIENTATIONS = new SparseIntArray();
     static{
@@ -231,14 +233,14 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
     private DocumentFile garbageClassFolder;
     private String garbageClassName;
     private int garbageClassNumber;
-    //private TextView counterTxt;
+    private TextView counterTxt;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_camera_feed);
         camFeed = findViewById(R.id.cam_feed);
-        //counterTxt= findViewById(R.id.img_counter);
+        counterTxt= findViewById(R.id.img_counter);
         picBtn = findViewById(R.id.pic_btn);
         picBtn.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -270,7 +272,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
             garbageClassName = b.getString(GARBAGE_CLASS_NAME);
             garbageClassNumber = b.getInt(GARBAGE_CLASS_NUMBER);
         }
-        //counterTxt.setText(garbageClassNumber+"");
+        counterTxt.setText(garbageClassNumber+"");
     }
 
     @Override
@@ -416,9 +418,11 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
                     super.onCaptureCompleted(session, request, result);
                     // TODO: please make the bgHandler communicate with the original UI Thread to update counter
                     garbageClassNumber+=1;
-                    //counterTxt.setText(garbageClassNumber+"");
                     outputImageFile = createImageFile();
                     writeDataToDataSet(garbageClassName+"/"+imageName);
+                    uiHandler.post(()->{
+                        counterTxt.setText(garbageClassNumber+"");
+                    });
                 }
 
             };
@@ -440,16 +444,20 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
             bgThread = new HandlerThread("CameraFeed");
             bgThread.start();
             bgHandler = new Handler(bgThread.getLooper());
+            uiHandler = new Handler(Looper.getMainLooper());
         }
     }
 
     private void stopBgThread(){
         if(bgThread!=null){
+            bgHandler.removeCallbacksAndMessages(null);
+            uiHandler.removeCallbacksAndMessages(null);
             bgThread.quitSafely();
             try{
                 bgThread.join();
                 bgThread = null;
                 bgHandler = null;
+
             }catch (InterruptedException e){
                 Log.d(CAMERA_FEED,"Error stopping Bg Thread", e);
             }

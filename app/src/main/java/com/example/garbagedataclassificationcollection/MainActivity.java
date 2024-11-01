@@ -39,12 +39,13 @@ public class MainActivity extends AppCompatActivity implements DataCommunication
     private static final int REQUEST_READ_SOTRAGE = 2;
 
     private TextView pathTxt;
-    private ActivityResultLauncher<Intent> document_tree_launcher;
+    private ActivityResultLauncher<Intent> documentTreeLauncher;
     private DocumentFile myDataSetDirectory;
     private DocumentFile myDataSet;
     private FloatingActionButton camBtn;
     private EditText garbageField;
     private EditText qteField;
+    private boolean isDatasetLoaded = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -73,7 +74,7 @@ public class MainActivity extends AppCompatActivity implements DataCommunication
             @Override
             public void onClick(View view) {
                 // get the number of elements in the selected class in csv if exists
-                if(!garbageField.getText().toString().trim().equals("")){
+                if(!garbageField.getText().toString().trim().equals("") && isDatasetLoaded){
 
                     DocumentFile garbageClassFolder = createImageFolder(garbageField.getText().toString().trim());
 
@@ -83,12 +84,20 @@ public class MainActivity extends AppCompatActivity implements DataCommunication
                     i.putExtra(CSV_FILE, myDataSet.getUri());
                     i.putExtra(GARBAGE_CLASS_NAME, garbageClassFolder.getName());
                     i.putExtra(GARBAGE_CLASS_NUMBER, Integer.parseInt(qteField.getText().toString()));
+
+                    // app returns to older state
+                    garbageField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_NORMAL);
+                    isDatasetLoaded = false;
+                    pathTxt.setText("");
+                    qteField.setText("");
+
+                    // start next activity
                     startActivity(i);
                 }
             }
         });
 
-        document_tree_launcher =registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result->{
+        documentTreeLauncher =registerForActivityResult(new ActivityResultContracts.StartActivityForResult(), result->{
             if(result.getResultCode() == RESULT_OK){
                 Intent data = result.getData();
                 if(data!=null){
@@ -105,10 +114,11 @@ public class MainActivity extends AppCompatActivity implements DataCommunication
                     pathTxt.setText(R.string.dir_loaded);
                     garbageField.setInputType(InputType.TYPE_NULL); // make sure to make it editable after returning from CameraFeedActivity
                     qteField.setText(""+getGarbageClassNbr(garbageField.getText().toString(), myDataSet));
-
+                    isDatasetLoaded =true;
                 }
             }
         });
+
 
     }
 
@@ -196,7 +206,7 @@ public class MainActivity extends AppCompatActivity implements DataCommunication
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         i.addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-        document_tree_launcher.launch(i);
+        documentTreeLauncher.launch(i);
     }
 
 
