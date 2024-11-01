@@ -416,7 +416,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
                 @Override
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
                     super.onCaptureCompleted(session, request, result);
-                    // TODO: please make the bgHandler communicate with the original UI Thread to update counter
+                    // The counter ui is updated in the main ui thread
                     garbageClassNumber+=1;
                     outputImageFile = createImageFile();
                     writeDataToDataSet(garbageClassName+"/"+imageName);
@@ -511,7 +511,7 @@ public class CameraFeedActivity extends AppCompatActivity implements DataCommuni
     }
 
     private DocumentFile createImageFile(){
-        /* Todo: Create image file after capturing the image, its name follows this format: (garbageClass)-(number).jpeg*/
+
         String timestamp = new SimpleDateFormat("yyyy_MM_dd hh:mm:ss").format(new Date());
         imageName = garbageClassName+"_"+garbageClassNumber+"_"+timestamp;
         return garbageClassFolder.createFile("image/jpeg", imageName);

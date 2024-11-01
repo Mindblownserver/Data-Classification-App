@@ -106,7 +106,7 @@ public class MainActivity extends AppCompatActivity implements DataCommunication
                     // check if you can write in directory
                     // get CSV Document
                     boolean foundFile = csvFileExists();
-                    /* Todo: Get the number of rows with chosen class name (we can do that upon the camBtn click*/
+
                     if(!foundFile){
                         myDataSet = myDataSetDirectory.createFile("text/csv", "myDataSet.csv");
                         writeHeader(myDataSet);
